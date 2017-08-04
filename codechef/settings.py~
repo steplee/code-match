@@ -1,0 +1,3 @@
+'ITEM_PIPELINES' = {
+    'scraper.pipelines.AssembleCodechefPipeline': 1
+}
