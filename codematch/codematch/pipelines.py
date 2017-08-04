@@ -5,6 +5,9 @@
 # Don't forget to add your pipeline to the ITEM_PIPELINES setting
 # See: http://doc.scrapy.org/en/latest/topics/item-pipeline.html
 
+from codematch.items import EditorialItem, BriefItem
+import json,os
+import pdb
 
 class AssembleCodechefPipeline(object):
     def __init__(self):
@@ -13,27 +16,30 @@ class AssembleCodechefPipeline(object):
         self.log_file = open("./data/codechef/_already_processed","a")
 
     def process_item(self, item, spider):
+        title = item['title']
         if type(item) == EditorialItem:
-            self.editorials[item.title] = item
+            self.editorials[title] = item
         if type(item) == BriefItem:
-            self.briefs[item.title] = item
-        if item.title in self.briefs and item.title in self.editorials:
+            self.briefs[title] = item
+        if title in self.briefs and title in self.editorials and title not in spider.already_processed:
             # Complete, store it!
-            print("DONE WITH " + str(item.title))
-            self.write_file(item.title)
-            spider.already_processed.add(item.title)
+            print("DONE WITH " + str(title))
+            self.write_item(title)
+            spider.already_processed.add(title)
+            spider.num_success += 1
 
     def write_item(self, title):
         br = self.briefs[title]
         ed = self.editorials[title]
-        d = {"title":title, "editorial":ed, "brief":br}
-        js = json.loads(d)
+        d = {"title":title, "editorial":dict(ed), "brief":dict(br)}
+        #pdb.set_trace()
+        js = json.dumps(d)
         if os.path.exists("./data/codechef/"+title):
             print(" WARNING: %s file already processed !!!!"%title)
         else:
             with open("./data/codechef/"+title,"w") as f:
                 f.write(js)
-            log_file.write(title + "\n")
+            self.log_file.write(title + "\n")
 
     def close_spider(self, spider):
         self.log_file.close()

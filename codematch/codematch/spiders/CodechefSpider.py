@@ -1,13 +1,16 @@
 import scrapy
 import pdb
-import json,os
+import json,os,re
 import lxml.etree
+import re
+
+from codematch.items import EditorialItem, BriefItem
 
 start='https://discuss.codechef.com/tags/editorial/?sort=active&page=3'
 
 base_problem_url="https://www.codechef.com/problems/"
 start_base = "https://discuss.codechef.com/tags/editorial/?sort=active&page="
-starts = [start_base+str(i) for i in range(1,2)]
+starts = [start_base+str(i) for i in range(1,30)]
 brief_api_url = "https://www.codechef.com/api/contests/PRACTICE/problems/"
 
 cols = ['\033[95m','\033[94m','\033[92m','\033[93m','\033[91m']
@@ -19,7 +22,7 @@ def pprint(s, lvl=-1):
         print(cols[lvl%len(cols)] + s + endcol)
 
 class CodechefSpider(scrapy.Spider):
-    name = 'blogspider'
+    name = 'codechef'
     start_urls = starts
 
     def __init__(self, category=None, *args, **kwargs):
@@ -30,8 +33,13 @@ class CodechefSpider(scrapy.Spider):
             with open("./data/codechef/_already_processed", 'r') as f:
                 for line in f:
                     already_processed.add(line)
-        print(" ... Done, already have %d processed",len(already_processed))
+        print(" ... Done, already have %d processed"%len(already_processed))
         self.already_processed = already_processed;
+        self.num_total=0
+        self.num_success=0
+
+    def close(self, reason):
+        print("\nSpider Closed (%d/%d)\n"%(self.num_success,self.num_total))
 
     def parse(self, response):
         url = response.url
@@ -44,7 +52,7 @@ class CodechefSpider(scrapy.Spider):
                 title = ele.css('a ::text').extract_first()
                 #pdb.set_trace()
                 lnk_url = ele.css('a::attr(href)').extract_first()
-                if 'Editorial' in title:
+                if '- Editorial' in title:
                     #yield {'title': title}
                     if lnk_url is not None:
                         lnk_url = response.urljoin(lnk_url)
@@ -101,6 +109,9 @@ class CodechefSpider(scrapy.Spider):
                 elif state != "solution_links" and node.css('p'):
                     txt = map(str.strip, node.css('p::text').extract())
                     txt = ' '.join(txt).strip()
+                    """txt =txt.replace("<b>","").replace("</b>","").replace("<li>","").replace("</li>","").replace("<\/li>","").replace("<\/b>","")
+                    txt = re.sub(txt,"\<img>.*\<\/img\>","")
+                    txt = re.sub(txt,"\<.?img [^\>]\>","")"""
                     if state in segments:
                         segments[state] += " " + txt
                     elif state != "_start":
@@ -119,19 +130,27 @@ class CodechefSpider(scrapy.Spider):
         # This is a brief
         elif "tags" not in url and "problems" in url:
             j = json.loads(response.text)
-            title = j["problem_code"]
+            if "problem_code" not in j:
+                pprint("NO PROBLEM CODE\n",1)
+                print(str(j))
+            title = str(j["problem_code"])
             full_title = j["problem_name"]
             if title in self.already_processed:
                 print(title+" has already been processed, skipping")
                 return
             print("\n\n BRIEF ITEM -- %s\n"%title)
+            self.num_total += 1
 
-            root = lxml.etree.fromstring("<html>" + j["body"] + "</html>")
+            ss = j['body']
+            ss =ss.replace("<b>","").replace("</b>","").replace("<li>","").replace("</li>","").replace("<\/li>","").replace("<\/b>","").replace("<br>","")
+
+            root = lxml.etree.fromstring("<html>" + ss + "</html>")
 
             segments = {'title':title, 'full_title':full_title}
             state="prompt"
 
-            ss = ''.join(root.xpath("//text()")).split('\n')
+            ss = ''.join(root.xpath("//text()"))
+            ss = ss.split('\n')
 
             for s in ss:
                 if "All submissions for this problem are " in s or \
